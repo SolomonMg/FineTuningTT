@@ -1,14 +1,22 @@
 """
+Estimates cost to fine tune labelled data, TikTok transcript & metadata.
+    Also provides quick estimates of inference (prediction on new data).
+Author: Sol Messing 
+Input: train.jsonl, val.jsonl - jsonl files structured for
+    OpenAI SFT. 
+Output: summary stats estimating cost for SFT and inference. 
+Usage below: 
+
 Usage: 
 
 python estimate_finetune_cost.py \
-  --train data/train_SMALL.jsonl \
-  --val data/val_SMALL.jsonl \
+  --train data/train.jsonl \
+  --val data/val.jsonl \
   --epochs 1
 
 python estimate_finetune_cost.py \
-  --train data/train_SMALL.jsonl \
-  --val data/val_SMALL.jsonl \
+  --train data/train.jsonl \
+  --val data/val.jsonl \
   --est-infer-input-toks 435 \
   --est-infer-output-toks 25 \
   --est-infer-n-calls 400000

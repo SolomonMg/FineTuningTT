@@ -1,3 +1,13 @@
+"""
+Minimal training script for SFT via the OpenAI API. Initial training
+    on gpt-4o-2024-08-06, though this can be changed. 
+Author: Sol Messing 
+Input: train.jsonl, val.jsonl - jsonl files structured for
+    OpenAI SFT. 
+Output: fine-tuned model at OpenAI
+
+"""
+
 
 from openai import OpenAI
 import time
@@ -8,7 +18,7 @@ import time
 client = OpenAI()
 
 # Upload (context managers so files close properly)
-with open("data/train_SMALL.jsonl", "rb") as tf, open("data/val_SMALL.jsonl", "rb") as vf:
+with open("data/train.jsonl", "rb") as tf, open("data/SMALL.jsonl", "rb") as vf:
     train_file = client.files.create(file=tf, purpose="fine-tune")
     val_file   = client.files.create(file=vf, purpose="fine-tune")
 

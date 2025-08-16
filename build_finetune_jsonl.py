@@ -1,26 +1,31 @@
 
 """
-Usage: 
+Builds jsonl for fine tuning from labelled data, TikTok transcript & metadata.
+    First part of fine-tuning workflow. 
+Author: Sol Messing 
+Input: china_labeling_sample_all_Jul30.csv, 
+    china_labeling_sample_all_with_caption.parquet
+Output: train.jsonl, val.jsonl - jsonl files structured for
+    OpenAI SFT. 
+Usage below.
 
-Toy run 
-
+Toy run:
 python build_finetune_jsonl.py \
-    --labels-csv data/china_labeling_sample_all_Jul30_proc.csv \
+    --labels-csv data/china_labeling_sample_all_Jul30.csv \
     --meta-parquet data/china_labeling_sample_all_with_caption.parquet \
-    --out-jsonl train_SMALL.jsonl \
-    --val-jsonl val_SMALL.jsonl \
-    --val-size 5 \
+    --out-jsonl data/train_SMALL.jsonl \
+    --val-jsonl data/val_SMALL.jsonl \
+    --val-size 2 \
     --seed 7 \
     --limit 10
 
 
 Actual run: 
-
 python build_finetune_jsonl.py \
-    --labels-csv data/china_labeling_sample_all_Jul30_proc.csv \
+    --labels-csv data/china_labeling_sample_all_Jul30.csv \
     --meta-parquet data/china_labeling_sample_all_with_caption.parquet \
-    --out-jsonl train_SMALL.jsonl \
-    --val-jsonl val_SMALL.jsonl \
+    --out-jsonl data/train.jsonl \
+    --val-jsonl data/val.jsonl \
     --val-size 100 \
     --seed 7
 
