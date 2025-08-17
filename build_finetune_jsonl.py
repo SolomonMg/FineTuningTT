@@ -20,20 +20,23 @@ python build_finetune_jsonl.py \
     --limit 10
 
 
-Actual run: 
+Build JSONL for TRAIN (no --val-jsonl here):
 python build_finetune_jsonl.py \
-    --labels-csv data/china_labeling_sample_all_Jul30.csv \
+    --labels-csv  data/labels_bal_train.csv \
     --meta-parquet data/china_labeling_sample_all_with_caption.parquet \
-    --out-jsonl data/train.jsonl \
-    --val-jsonl data/val.jsonl \
-    --val-size 100 \
-    --seed 7
+    --out-jsonl   data/train_BAL.jsonl
+
+Build JSONL for VAL 
+python build_finetune_jsonl.py \
+    --labels-csv  data/labels_bal_val.csv \
+    --meta-parquet data/china_labeling_sample_all_with_caption.parquet \
+    --out-jsonl   data/val_BAL.jsonl
 
 """
 
 #!/usr/bin/env python3
 # DuckDB → JSONL (adds train/val split, tiny validator)
-import argparse, json, duckdb, random
+import argparse, json, duckdb, random, os
 
 SYSTEM_MSG = (
   "You are a meticulous labeling assistant for TikTok videos. "
@@ -42,6 +45,7 @@ SYSTEM_MSG = (
   "CHINA-SENSITIVE ISSUES include: Taiwan independence or pro-DPP; Hong Kong national-security law and political "
   "repression; independence of Tibet/Xinjiang; repression of Tibetans/Uyghurs; June 4 Tiananmen; criticism/ridicule "
   "of Xi Jinping or the CCP; corruption in China.\n\n"
+  "Do not default to the most frequent class; base labels on explicit evidence. Use cannot_determine only when evidence is insufficient."
   "LABEL THE VIDEO ON FOUR DIMENSIONS:\n"
   "1) china_stance — 'good' | 'bad' | 'neutral' | 'not_related' | 'cannot_determine'\n"
   "2) china_sensitive — 'yes' | 'no' | 'cannot_determine'\n"
@@ -79,7 +83,7 @@ def norm_stance(x):
     s = str(x).strip().lower()
     if s in {"good","bad","neutral","not_related","cannot_determine"}: return s
     if s in {"not related","not related to china"}: return "not_related"
-    if s in {"could not determine","cnd","unknown","n/a"}: return "cannot_determine"
+    if s in {"could not determine","cnd","unknown","n/a",""}: return "cannot_determine"
     return "cannot_determine"
 
 def norm_yn(x):
@@ -88,14 +92,14 @@ def norm_yn(x):
     if s in {"yes","no","cannot_determine"}: return s
     if s in {"y","1","true"}: return "yes"
     if s in {"n","0","false"}: return "no"
-    if s in {"cnd","unknown","could not determine","n/a"}: return "cannot_determine"
+    if s in {"cnd","unknown","could not determine","n/a",""}: return "cannot_determine"
     return "cannot_determine"
 
 def build_languages(row):
     langs=[]
     for col,outn in [("english","english"),("mandarin","mandarin"),
                      ("spanish","spanish"),("other_lang","other"),("no_language","no_language")]:
-        if truthy(row.get(col)): langs.append(outn)
+        if col in row and truthy(row.get(col)): langs.append(outn)
     if not langs: langs=["no_language"]
     if "no_language" in langs: return ["no_language"]
     order={"english":0,"mandarin":1,"spanish":2,"other":3,"no_language":4}
@@ -118,6 +122,14 @@ def validate_labels(obj):
     if "no_language" in langs and len(langs) != 1: return "no_language must be only item"
     return None
 
+def sqlq(s:str)->str: return s.replace("'", "''")
+
+def read_csv_columns(con, path:str):
+    rows = con.execute(
+        f"DESCRIBE SELECT * FROM read_csv_auto('{sqlq(path)}', HEADER=TRUE, ALL_VARCHAR=TRUE, IGNORE_ERRORS=TRUE, SAMPLE_SIZE=-1)"
+    ).fetchall()
+    return [r[0] for r in rows]
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--labels-csv", required=True)
@@ -136,14 +148,51 @@ def main():
 
     con = duckdb.connect()
 
+    # --- detect columns in labels CSV ---
+    lcols = read_csv_columns(con, args.labels_csv)
+    has_meta  = "meta_id" in lcols
+    has_video = args.labels_video_col in lcols
+
+    # build meta_id expression + WHERE, without referencing a missing column
+    if has_meta:
+        meta_expr = "CAST(l.meta_id AS VARCHAR)"
+        where_meta = "l.meta_id IS NOT NULL AND l.meta_id <> ''"
+    elif has_video:
+        meta_expr = f"regexp_extract(l.{args.labels_video_col}, '([0-9]{{10,}})\\.mp4', 1)"
+        where_meta = f"l.{args.labels_video_col} IS NOT NULL AND {meta_expr} IS NOT NULL"
+    else:
+        raise SystemExit("Labels CSV must contain either 'meta_id' or a video path column (use --labels-video-col).")
+
+    # languages: include only present columns; synthesize blanks for missing ones
+    lang_cols = ["english","mandarin","spanish","other_lang","no_language"]
+    lang_select_parts = []
+    for c in lang_cols:
+        if c in lcols:
+            lang_select_parts.append(f"l.{c} AS {c}")
+        else:
+            lang_select_parts.append(f"'' AS {c}")
+    lang_select_sql = ", ".join(lang_select_parts)
+
+    # labels: expect normalized columns to exist (balanced CSVs or preprocessed raw)
+    needed = ["china_stance_score","sensitive","collective_action"]
+    missing = [c for c in needed if c not in lcols]
+    if missing:
+        raise SystemExit(f"Labels CSV is missing required columns: {missing}. "
+                         "Provide normalized labels CSV or add preprocessing.")
+
+    # --- main SQL (labels + metadata) ---
     sql = f"""
-    WITH L AS (
+    WITH SRC AS (
+      SELECT * FROM read_csv_auto('{sqlq(args.labels_csv)}',
+                                  HEADER=TRUE, ALL_VARCHAR=TRUE, IGNORE_ERRORS=TRUE, SAMPLE_SIZE=-1) AS l
+    ),
+    L AS (
       SELECT
-        regexp_extract(l.{args.labels_video_col}, '([0-9]{{10,}})\\.mp4', 1) AS meta_id,
+        {meta_expr} AS meta_id,
         l.china_stance_score, l.sensitive, l.collective_action,
-        l.english, l.mandarin, l.spanish, l.other_lang, l.no_language
-      FROM read_csv_auto(?, HEADER=TRUE, ALL_VARCHAR=TRUE, IGNORE_ERRORS=TRUE, SAMPLE_SIZE=-1) AS l
-      WHERE {args.labels_video_col} IS NOT NULL
+        {lang_select_sql}
+      FROM SRC AS l
+      WHERE {where_meta}
     ),
     M AS (
       SELECT
@@ -153,7 +202,7 @@ def main():
         m.authorstats_heartCount, m.authorstats_diggCount,
         m.country, m.music_title, m.music_authorName, m.pol,
         m.meta_desc, m.subtitle
-      FROM read_parquet(?) AS m
+      FROM read_parquet('{sqlq(args.meta_parquet)}') AS m
     )
     SELECT
       L.meta_id,
@@ -166,14 +215,14 @@ def main():
       M.meta_desc, M.subtitle
     FROM L JOIN M USING (meta_id)
     """
-    if args.limit: sql += f" LIMIT {int(args.limit)}"
+    if args.limit:
+        sql += f" LIMIT {int(args.limit)}"
 
-    cur = con.execute(sql, [args.labels_csv, args.meta_parquet])
-    data = cur.fetchnumpy()
+    data = con.execute(sql).fetchnumpy()
     cols = list(data.keys())
     n = len(data[cols[0]]) if cols else 0
 
-    # build all rows once (keeps code simple; fine for small/medium sets)
+    # build messages
     rows = []
     skipped = 0
     for i in range(n):
@@ -188,13 +237,20 @@ def main():
             skipped += 1
             continue
         assistant = json.dumps(labels, separators=(",",":"), ensure_ascii=False)
+
+        def safe_intlike(x):
+            try:
+                return str(int(float(x))) if x not in (None,"") else "0"
+            except Exception:
+                return "0"
+
         user_msg = USER_TPL.format(
             transcript    = (row.get("subtitle") or ""),
             description   = (row.get("meta_desc") or ""),
             verified      = ("Yes" if truthy(row.get("author_verified")) else "No"),
-            followers     = str(int(float(row.get("authorstats_followerCount") or 0))),
-            hearts        = str(int(float(row.get("authorstats_heartCount") or 0))),
-            likes         = str(int(float(row.get("authorstats_diggCount") or 0))),
+            followers     = safe_intlike(row.get("authorstats_followerCount")),
+            hearts        = safe_intlike(row.get("authorstats_heartCount")),
+            likes         = safe_intlike(row.get("authorstats_diggCount")),
             country       = (row.get("country") or ""),
             music_title   = (row.get("music_title") or ""),
             music_author  = (row.get("music_authorName") or ""),
@@ -211,9 +267,10 @@ def main():
         })
 
     if not rows:
-        raise SystemExit("No valid rows to write (all skipped?).")
+        raise SystemExit("No valid rows to write (all skipped or no join on meta_id).")
 
-    # split
+    # split/write
+    os.makedirs(os.path.dirname(args.out_jsonl) or ".", exist_ok=True)
     if args.val_jsonl:
         rng = random.Random(args.seed)
         idx = list(range(len(rows)))
@@ -227,6 +284,7 @@ def main():
             train_idx, val_idx = idx[:cut], set(idx[cut:])
         with open(args.out_jsonl, "w", encoding="utf-8") as ft:
             for i in train_idx: ft.write(json.dumps(rows[i], ensure_ascii=False) + "\n")
+        os.makedirs(os.path.dirname(args.val_jsonl) or ".", exist_ok=True)
         with open(args.val_jsonl, "w", encoding="utf-8") as fv:
             for i in val_idx: fv.write(json.dumps(rows[i], ensure_ascii=False) + "\n")
         print(f"Wrote {len(train_idx)} → {args.out_jsonl}; {len(val_idx)} → {args.val_jsonl}; skipped {skipped}")
@@ -237,4 +295,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

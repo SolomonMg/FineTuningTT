@@ -10,16 +10,20 @@ Usage below:
 Usage: 
 
 python estimate_finetune_cost.py \
-  --train data/train.jsonl \
-  --val data/val.jsonl \
-  --epochs 1
+    --train data/train.jsonl \
+    --val data/val.jsonl \
+    --epochs 2
 
+Rates for gpt-4.1-mini-2025-04-14
 python estimate_finetune_cost.py \
-  --train data/train.jsonl \
-  --val data/val.jsonl \
-  --est-infer-input-toks 435 \
-  --est-infer-output-toks 25 \
-  --est-infer-n-calls 400000
+    --train data/train.jsonl \
+    --val data/val.jsonl \
+    --train-rate-per-m 5\
+    --infer-in-per-m .8\
+    --infer-out-per-m 3.2\
+    --est-infer-input-toks 435 \
+    --est-infer-output-toks 25 \
+    --est-infer-n-calls 400000
 
 
 """

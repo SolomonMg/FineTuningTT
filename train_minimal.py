@@ -8,9 +8,14 @@ Output: fine-tuned model at OpenAI
 
 """
 
-
 from openai import OpenAI
 import time
+
+OPENAI_MODEL = "gpt-4.1-mini-2025-04-14"
+# ALTs: "gpt-4o-2024-08-06", "gpt-4.1-2025-04-14"
+
+MODEL_SUFFIX = "tt-china-labels-v0"
+N_EPOCHS = 1
 
 # Set your API key as an environment variable before running:
 # export OPENAI_API_KEY="sk-..."
@@ -23,11 +28,11 @@ with open("data/train.jsonl", "rb") as tf, open("data/SMALL.jsonl", "rb") as vf:
     val_file   = client.files.create(file=vf, purpose="fine-tune")
 
 job = client.fine_tuning.jobs.create(
-    model="gpt-4o-2024-08-06",        # use the snapshot ID
+    model=OPENAI_MODEL,        # use the snapshot ID
     training_file=train_file.id,
     validation_file=val_file.id,
-    suffix="tt-china-labels-v0",      # optional, helps you find it later
-    hyperparameters={"n_epochs": 1}   # smoke test; bump for real runs
+    suffix=MODEL_SUFFIX,      # optional, helps you find it later
+    hyperparameters={"n_epochs": N_EPOCHS}   # smoke test; bump for real runs
 )
 print("Fine-tune job ID:", job.id)
 
