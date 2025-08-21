@@ -10,8 +10,24 @@ Usage:
   export OPENAI_API_KEY="sk-..."
   python train_minimal.py \
     --model gpt-4.1-mini-2025-04-14 \
+    --train data/train_BAL_rewritten_v7.jsonl \
+    --val   data/val_BAL_safe.jsonl \
+    --suffix tt-china-labels-v0 \
+    --n-epochs 1 \
+    --wait
+
+python train_minimal.py \
+    --model gpt-4o-2024-08-06 \
     --train data/train_BAL_safe.jsonl \
     --val   data/val_BAL_safe.jsonl \
+    --suffix tt-china-labels-v0 \
+    --n-epochs 1 \
+    --wait
+
+python train_minimal.py \
+    --model gpt-4.1-mini-2025-04-14 \
+    --train data/train_BAL_final.jsonl \
+    --val data/val_BAL.jsonl \
     --suffix tt-china-labels-v0 \
     --n-epochs 1 \
     --wait

@@ -6,9 +6,9 @@ Adds throttling, retries, and hashing cache to avoid 429s.
 Usage:
   export OPENAI_API_KEY="sk-..."
   python check_moderation.py \
-    --in data/train_BAL.jsonl \
-    --out-csv data/flagged.csv \
-    --cache .modcache_moderation.json \
+    --in data/train_BAL_final.jsonl \
+    --out-csv data/flagged_final.csv \
+    --cache .modcache_moderation2.json \
     --batch-size 8 --rpm 30 --max-rows 1000
 """
 import argparse, csv, json, os, sys, time, hashlib, random

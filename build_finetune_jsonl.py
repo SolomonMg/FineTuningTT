@@ -9,17 +9,6 @@ Output: train.jsonl, val.jsonl - jsonl files structured for
     OpenAI SFT. 
 Usage below.
 
-Toy run:
-python build_finetune_jsonl.py \
-    --labels-csv data/china_labeling_sample_all_Jul30.csv \
-    --meta-parquet data/china_labeling_sample_all_with_caption.parquet \
-    --out-jsonl data/train_SMALL.jsonl \
-    --val-jsonl data/val_SMALL.jsonl \
-    --val-size 2 \
-    --seed 7 \
-    --limit 10
-
-
 Build JSONL for TRAIN (no --val-jsonl here):
 python build_finetune_jsonl.py \
     --labels-csv  data/labels_bal_train.csv \
